@@ -16,7 +16,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # ================= НАСТРОЙКИ СИСТЕМЫ =================
-BOT_TOKEN = "8500361446:AAGEzSq5irgTnNrlXXCv9Y22kvXiggzTWpI"
+BOT_TOKEN = "8500361446:AAGbvBmftESDy7jEK-7AQ2KMY2i8NoVf3sU"
 ADMIN_ID = 1154469594  # Твой цифровой Telegram ID (узнать в @userinfobot)
 DB_PATH = "group_study.db"
 
