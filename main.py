@@ -16,7 +16,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # ================= НАСТРОЙКИ СИСТЕМЫ =================
-BOT_TOKEN = "8500361446:AAGbvBmftESDy7jEK-7AQ2KMY2i8NoVf3sU"
+BOT_TOKEN = "8602029674:AAGa7OsWmTSXIZjkvG0Uo0FPD2w6Jr1TZ5I"
 ADMIN_ID = 1154469594  # Твой цифровой Telegram ID (узнать в @userinfobot)
 DB_PATH = "group_study.db"
 
@@ -244,7 +244,7 @@ async def process_fio(message: Message, state: FSMContext):
         await db.execute("""
             INSERT INTO group_roster (full_name, is_registered, user_id)
             VALUES (?, 1, ?)
-            ON CONFLICT(full_name) DO UPDATE SET is_registered = 1, user_id = ?
+            ON CONFLICT(group_roster.full_name) DO UPDATE SET is_registered = 1, user_id = ?
         """, (fio, user_id, user_id))
         
         await db.commit()
@@ -680,8 +680,10 @@ async def process_broadcast(message: Message, state: FSMContext):
 # ================= ТОЧКА ВХОДА =================
 async def main():
     await init_db()
+    await bot.delete_webhook(drop_pending_updates=True)
     print("🚀 Система учебной группы успешно запущена!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
+```,send_attachment_attachment_filename_2413:
