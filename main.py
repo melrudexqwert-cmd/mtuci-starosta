@@ -21,7 +21,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 # ================= НАСТРОЙКИ СИСТЕМЫ =================
 BOT_TOKEN = "8602029674:AAGa7OsWmTSXIZjkvG0Uo0FPD2w6Jr1TZ5I"
 ADMIN_ID = 1154469594  # Твой цифровой Telegram ID (Админ: Хамедов Даниил)
-ZAM_ID = 8977192947    # Твой цифровой Telegram ID Зама (Радостнов Пётр)
+ZAM_ID = 8411029132    # Твой цифровой Telegram ID Зама (Радостнов Пётр)
 DB_PATH = "group_study.db"
 TIMEZONE = "Europe/Moscow"
 
@@ -112,13 +112,9 @@ class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
     waiting_for_roster_input = State()
 
-# ================= СПИСОК ГРУППЫ ПО УМОЛЧАНИЮ =================
-# Сюда можно вписать всех студентов группы:
 STUDENTS_LIST = [
     "Хамедов Даниил",
     "Радостнов Пётр Кириллович",
-    # "Иванов Иван Иванович",
-    # "Смирнов Алексей Игоревич",
 ]
 
 class AddSingleStudentState(StatesGroup):
@@ -179,7 +175,6 @@ async def init_db():
                 status TEXT
             )
         """)
-        # Оценки теперь привязаны к ФИО студента (работает и до регистрации в ТГ)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS grades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -190,7 +185,6 @@ async def init_db():
             )
         """)
 
-        # Автозаполнение списка группы
         for student in STUDENTS_LIST:
             clean_name = " ".join(student.strip().split())
             if clean_name:
@@ -326,7 +320,6 @@ async def cmd_start(message: Message, state: FSMContext):
     username = f"@{message.from_user.username}" if message.from_user.username else "без_ника"
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
 
-    # 1. Авто-вход для Админа и Зама
     if user_id == ADMIN_ID or user_id == ZAM_ID:
         admin_fio = "Хамедов Даниил (Староста)" if user_id == ADMIN_ID else "Радостнов Пётр (Зам)"
         
@@ -351,7 +344,6 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         return
 
-    # 2. Обычные студенты
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT full_name, is_admin FROM users WHERE user_id = ?", (user_id,)) as cur:
             user = await cur.fetchone()
@@ -546,24 +538,22 @@ async def process_single_student_name(message: Message, state: FSMContext):
             await message.answer("⚠️ Такой студент уже есть в списке группы!", reply_markup=admin_menu_kb())
     await state.clear()
 
-# ================= АДМИНКА: ОЦЕНКИ (ПО ВСЕМУ СПИСКУ) =================
+# ================= АДМИНКА: ОЦЕНКИ =================
 @dp.callback_query(F.data == "adm_grade_start")
 async def cb_grade_start(call: CallbackQuery, state: FSMContext):
     await call.answer()
     async with aiosqlite.connect(DB_PATH) as db:
-        # Берем ВСЕХ студентов из списка группы
         async with db.execute("SELECT id, full_name FROM group_roster ORDER BY full_name") as cur:
             students = await cur.fetchall()
 
     if not students:
-        await call.message.edit_text("Список группы пуст. Добавьте студентов через админку.", reply_markup=admin_menu_kb())
+        await call.message.edit_text("Список группы пуст.", reply_markup=admin_menu_kb())
         return
 
     kb = []
     for s in students:
         r_id, fio = s[0], s[1]
         short_name = " ".join([fio.split()[0], fio.split()[1][0] + "." if len(fio.split()) > 1 else ""])
-        # Передаем только числовой ID (roster_id)
         kb.append([InlineKeyboardButton(text=f"👤 {short_name}", callback_data=f"gr_u:{r_id}")])
     
     kb.append([InlineKeyboardButton(text="❌ Отмена", callback_data="admin_menu")])
@@ -630,7 +620,6 @@ async def cb_grade_value_chosen(call: CallbackQuery, state: FSMContext):
     await state.clear()
     await call.message.edit_text(f"✅ Оценка **{grade}** для **{student_name}** ({subject}) сохранена!", reply_markup=admin_menu_kb(), parse_mode="Markdown")
 
-    # Если студент привязан к ТГ — шлем уведомление
     if target_user_id:
         try:
             await bot.send_message(
@@ -791,12 +780,11 @@ async def process_teacher_avtomat(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(f"✅ Информация по **{subject}** сохранена!", reply_markup=admin_menu_kb(), parse_mode="Markdown")
 
-# ================= ПЕРЕКЛИЧКА (ИСПРАВЛЕНО НА ID) =================
+# ================= ПЕРЕКЛИЧКА =================
 STATUS_EMOJIS = {"present": "✅ Был", "ill": "🤒 Болеет", "absent": "❌ Прогул", "valid": "📄 Уваж."}
 
 def attendance_kb():
     kb = []
-    # Используем короткий r_id в callback_data
     for r_id, info in current_attendance.items():
         fio = info["name"]
         status = info["status"]
@@ -819,10 +807,9 @@ async def cb_attendance_start(call: CallbackQuery):
             students = await cur.fetchall()
 
     if not students:
-        await call.message.edit_text("⚠️ Ростер группы пуст. Добавьте студентов через админку!", reply_markup=admin_menu_kb())
+        await call.message.edit_text("⚠️ Ростер группы пуст.", reply_markup=admin_menu_kb())
         return
 
-    # Заполняем словарь по числовому ID
     for s in students:
         current_attendance[s[0]] = {"name": s[1], "status": "present"}
 
