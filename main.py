@@ -264,14 +264,15 @@ def subjects_selection_kb(prefix: str):
 def deadline_selection_kb():
     today = datetime.now()
     kb = []
+    
     d_tomorrow = today + timedelta(days=1)
     d_after_tom = today + timedelta(days=2)
     
     label_tom = f"Завтра ({RU_DAYS[d_tomorrow.weekday()]}, {d_tomorrow.day} {RU_MONTHS[d_tomorrow.month-1]})"
     label_after = f"Послезавтра ({RU_DAYS[d_after_tom.weekday()]}, {d_after_tom.day} {RU_MONTHS[d_after_tom.month-1]})"
     
-    kb.append([InlineKeyboardButton(text=label_tom, callback_data=f"dl_val:{label_tom}")])
-    kb.append([InlineKeyboardButton(text=label_after, callback_data=f"dl_val:{label_after}")])
+    kb.append([InlineKeyboardButton(text=label_tom, callback_data="dl_val:Завтра")])
+    kb.append([InlineKeyboardButton(text=label_after, callback_data="dl_val:Послезавтра")])
     
     row = []
     for i in range(3, 8):
@@ -288,7 +289,6 @@ def deadline_selection_kb():
     kb.append([InlineKeyboardButton(text="К следующей паре", callback_data="dl_val:К следующей паре")])
     kb.append([InlineKeyboardButton(text="❌ Отмена", callback_data="to_main_menu")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
-
 # ================= ПЛАНИРОВЩИК ДЗ (19:00) =================
 async def send_daily_hw_reminder():
     async with aiosqlite.connect(DB_PATH) as db:
