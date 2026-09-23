@@ -29,7 +29,7 @@ RU_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 RU_MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", 
              "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 
-# ТОЧНЫЙ СПИСОК ПРЕДМЕТОВ С ИКОНКАМИ (1 КУРС СПО 11.02.18)
+# ТОЧНЫЙ СПИСК ПРЕДМЕТОВ С ИКОНКАМИ (1 КУРС СПО 11.02.18)
 SUBJECTS = {
     "Математика": "📐",
     "Физика": "⚡",
@@ -105,9 +105,6 @@ async def init_db():
                 file_id TEXT,
                 file_name TEXT
             )
-        """)
-        await db.execute("""
-            INSERT OR IGNORE INTO group_roster (full_name) VALUES ('Хамедов Даниил Алексеевич')
         """)
         await db.commit()
 
@@ -212,7 +209,7 @@ async def cmd_start(message: Message, state: FSMContext):
             parse_mode="Markdown"
         )
     else:
-        reg_text = "👋 Привет! Это бот группы для домашних заданий и учебных материалов.\n\n📝 **Для доступа напиши свои Фамилию Имя Отчество**:\n*(Пример: Хамедов Даниил Алексеевич)*"
+        reg_text = "👋 Привет! Это бот группы для домашних заданий и учебных материалов.\n\n📝 **Для доступа напиши свои Фамилию Имя Отчество**:\n*(Пример: Иванов Иван Иванович)*"
         await message.answer(reg_text, parse_mode="Markdown")
         await state.set_state(RegStates.waiting_for_fio)
 
@@ -228,11 +225,8 @@ async def process_fio(message: Message, state: FSMContext):
     username = f"@{message.from_user.username}" if message.from_user.username else "без_ника"
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
 
-    is_admin = (
-        user_id == ADMIN_ID or 
-        fio.lower() == "хамедов даниил алексеевич" or
-        fio.lower() == "хамедов даниил"
-    )
+    # Права админа выдаются СТРОГО по твоему Telegram ID (ADMIN_ID)
+    is_admin = (user_id == ADMIN_ID)
 
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
@@ -674,7 +668,7 @@ async def process_broadcast(message: Message, state: FSMContext):
             pass
 
     await state.clear()
-    await message.answer("✅ Информация отправлена всей группе!", reply_markup=admin_menu_kb())
+    await message.answer("✅ Информация отправлена всей группе!", reply_markup=admin_menu_qx() if 'admin_menu_qx' in globals() else admin_menu_kb())
 
 
 # ================= ТОЧКА ВХОДА =================
@@ -686,4 +680,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
