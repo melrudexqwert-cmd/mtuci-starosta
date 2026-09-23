@@ -114,36 +114,36 @@ async def init_db():
 # ================= КЛАВИАТУРЫ =================
 def main_menu_kb(is_admin: bool = False):
     kb = [
-        [InlineKeyboardButton(text="📚 Домашние задания", callback_query_data="hw_view")],
+        [InlineKeyboardButton(text="📚 Домашние задания", callback_data="hw_view")],
         [
-            InlineKeyboardButton(text="📖 Учебники", callback_query_data="books_view"),
+            InlineKeyboardButton(text="📖 Учебники", callback_data="books_view"),
             InlineKeyboardButton(text="📅 Расписание", url="https://t.me/vvfsched_bot")
         ],
-        [InlineKeyboardButton(text="👤 Мой профиль", callback_query_data="user_profile")]
+        [InlineKeyboardButton(text="👤 Мой профиль", callback_data="user_profile")]
     ]
     if is_admin:
-        kb.append([InlineKeyboardButton(text="⚙️ Панель управления", callback_query_data="admin_menu")])
+        kb.append([InlineKeyboardButton(text="⚙️ Панель управления", callback_data="admin_menu")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def admin_menu_kb():
     kb = [
-        [InlineKeyboardButton(text="➕ Добавить ДЗ", callback_query_data="adm_add_hw")],
-        [InlineKeyboardButton(text="📁 Добавить учебник", callback_query_data="adm_add_book")],
-        [InlineKeyboardButton(text="👥 Список группы (кто зашел / нет)", callback_query_data="adm_roster_status")],
-        [InlineKeyboardButton(text="📋 Загрузить список группы", callback_query_data="adm_import_roster")],
-        [InlineKeyboardButton(text="📥 Выгрузить список (.txt)", callback_query_data="adm_export_txt")],
+        [InlineKeyboardButton(text="➕ Добавить ДЗ", callback_data="adm_add_hw")],
+        [InlineKeyboardButton(text="📁 Добавить учебник", callback_data="adm_add_book")],
+        [InlineKeyboardButton(text="👥 Список группы (кто зашел / нет)", callback_data="adm_roster_status")],
+        [InlineKeyboardButton(text="📋 Загрузить список группы", callback_data="adm_import_roster")],
+        [InlineKeyboardButton(text="📥 Выгрузить список (.txt)", callback_data="adm_export_txt")],
         [
-            InlineKeyboardButton(text="🚫 Блокировка", callback_query_data="adm_ban"),
-            InlineKeyboardButton(text="✅ Разблокировка", callback_query_data="adm_unban")
+            InlineKeyboardButton(text="🚫 Блокировка", callback_data="adm_ban"),
+            InlineKeyboardButton(text="✅ Разблокировка", callback_data="adm_unban")
         ],
-        [InlineKeyboardButton(text="📢 Информация для группы", callback_query_data="adm_broadcast")],
-        [InlineKeyboardButton(text="⬅️ Главное меню", callback_query_data="to_main_menu")]
+        [InlineKeyboardButton(text="📢 Информация для группы", callback_data="adm_broadcast")],
+        [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="to_main_menu")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def back_to_main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ Главное меню", callback_query_data="to_main_menu")]
+        [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="to_main_menu")]
     ])
 
 def subjects_selection_kb(prefix: str):
@@ -151,13 +151,13 @@ def subjects_selection_kb(prefix: str):
     row = []
     for sub, icon in SUBJECTS.items():
         btn_text = f"{icon} {sub}"
-        row.append(InlineKeyboardButton(text=btn_text, callback_query_data=f"{prefix}:{sub}"))
+        row.append(InlineKeyboardButton(text=btn_text, callback_data=f"{prefix}:{sub}"))
         if len(row) == 2:
             kb.append(row)
             row = []
     if row:
         kb.append(row)
-    kb.append([InlineKeyboardButton(text="❌ Отмена", callback_query_data="to_main_menu")])
+    kb.append([InlineKeyboardButton(text="❌ Отмена", callback_data="to_main_menu")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def deadline_selection_kb():
@@ -170,23 +170,23 @@ def deadline_selection_kb():
     label_tom = f"Завтра ({RU_DAYS[d_tomorrow.weekday()]}, {d_tomorrow.day} {RU_MONTHS[d_tomorrow.month-1]})"
     label_after = f"Послезавтра ({RU_DAYS[d_after_tom.weekday()]}, {d_after_tom.day} {RU_MONTHS[d_after_tom.month-1]})"
     
-    kb.append([InlineKeyboardButton(text=label_tom, callback_query_data=f"dl_val:{label_tom}")])
-    kb.append([InlineKeyboardButton(text=label_after, callback_query_data=f"dl_val:{label_after}")])
+    kb.append([InlineKeyboardButton(text=label_tom, callback_data=f"dl_val:{label_tom}")])
+    kb.append([InlineKeyboardButton(text=label_after, callback_data=f"dl_val:{label_after}")])
     
     row = []
     for i in range(3, 8):
         d = today + timedelta(days=i)
         btn_text = f"{RU_DAYS[d.weekday()]} ({d.day}.{d.month:02d})"
         val_text = f"{RU_DAYS[d.weekday()]}, {d.day} {RU_MONTHS[d.month-1]}"
-        row.append(InlineKeyboardButton(text=btn_text, callback_query_data=f"dl_val:{val_text}"))
+        row.append(InlineKeyboardButton(text=btn_text, callback_data=f"dl_val:{val_text}"))
         if len(row) == 2:
             kb.append(row)
             row = []
     if row:
         kb.append(row)
         
-    kb.append([InlineKeyboardButton(text="К следующей паре", callback_query_data="dl_val:К следующей паре")])
-    kb.append([InlineKeyboardButton(text="❌ Отмена", callback_query_data="to_main_menu")])
+    kb.append([InlineKeyboardButton(text="К следующей паре", callback_data="dl_val:К следующей паре")])
+    kb.append([InlineKeyboardButton(text="❌ Отмена", callback_data="to_main_menu")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
@@ -306,8 +306,8 @@ async def cb_books_view(call: CallbackQuery):
     kb = []
     for b in books:
         icon = SUBJECTS.get(b[1], "📖")
-        kb.append([InlineKeyboardButton(text=f"{icon} {b[1]}: {b[2]}", callback_query_data=f"get_book:{b[0]}")])
-    kb.append([InlineKeyboardButton(text="⬅️ Главное меню", callback_query_data="to_main_menu")])
+        kb.append([InlineKeyboardButton(text=f"{icon} {b[1]}: {b[2]}", callback_data=f"get_book:{b[0]}")])
+    kb.append([InlineKeyboardButton(text="⬅️ Главное меню", callback_data="to_main_menu")])
 
     await call.message.edit_text(
         "📖 **Учебники и материалы:**\nНажмите на нужный предмет для скачивания:",
@@ -685,4 +685,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
