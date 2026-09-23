@@ -17,7 +17,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 # ================= НАСТРОЙКИ СИСТЕМЫ =================
 BOT_TOKEN = "8602029674:AAGa7OsWmTSXIZjkvG0Uo0FPD2w6Jr1TZ5I"
-ADMIN_ID = 1154469594  # Твой цифровой Telegram ID (узнать в @userinfobot)
+ADMIN_ID = 1154469594  # Твой цифровой Telegram ID (Админ: Хамедов Даниил)
+ZAM_ID = 1477636519    # Твой цифровой Telegram ID Зама (Радостнов Пётр)
 DB_PATH = "group_study.db"
 
 logging.basicConfig(level=logging.INFO)
@@ -194,6 +195,7 @@ async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
     
     async with aiosqlite.connect(DB_PATH) as db:
+        # 1. Проверяем, зарегистрирован ли уже этот user_id
         async with db.execute("SELECT full_name, is_admin, is_blocked FROM users WHERE user_id = ?", (user_id,)) as cur:
             user = await cur.fetchone()
 
@@ -201,7 +203,7 @@ async def cmd_start(message: Message, state: FSMContext):
         if user[2] == 1:
             await message.answer("⛔ Доступ к боту ограничен администратором.")
             return
-        is_admin = (user[1] == 1) or (user_id == ADMIN_ID)
+        is_admin = (user[1] == 1) or (user_id == ADMIN_ID) or (user_id == ZAM_ID)
         await message.answer(
             f"👋 С возвращением, **{user[0]}**!\n\n"
             f"Выберите нужный раздел:",
@@ -209,44 +211,64 @@ async def cmd_start(message: Message, state: FSMContext):
             parse_mode="Markdown"
         )
     else:
-        reg_text = "👋 Привет! Это бот группы для домашних заданий и учебных материалов.\n\n📝 **Для доступа напиши свои Фамилию Имя Отчество**:\n*(Пример: Иванов Иван Иванович)*"
+        # Проверяем, не заходил ли этот аккаунт уже под другим именем (на всякий случай)
+        reg_text = "👋 Привет! Это бот группы для домашних заданий и учебных материалов.\n\n📝 **Для доступа напиши свои Фамилию Имя Отчество точь-в-точь как в списке группы**:\n*(Пример: Иванов Иван Иванович)*"
         await message.answer(reg_text, parse_mode="Markdown")
         await state.set_state(RegStates.waiting_for_fio)
 
 @dp.message(StateFilter(RegStates.waiting_for_fio))
 async def process_fio(message: Message, state: FSMContext):
-    fio = " ".join(message.text.strip().split())
-    
-    if len(fio.split()) < 2:
-        await message.answer("⚠️ Пожалуйста, укажи как минимум Фамилию и Имя:")
-        return
-
+    fio_input = " ".join(message.text.strip().split())
     user_id = message.from_user.id
     username = f"@{message.from_user.username}" if message.from_user.username else "без_ника"
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
 
-    # Права админа выдаются СТРОГО по твоему Telegram ID (ADMIN_ID)
-    is_admin = (user_id == ADMIN_ID)
-
     async with aiosqlite.connect(DB_PATH) as db:
+        # 2. Проверяем, не занят ли этот Telegram ID уже кем-то в базе
+        async with db.execute("SELECT full_name FROM users WHERE user_id = ?", (user_id,)) as cur:
+            already_reg = await cur.fetchone()
+        if already_reg:
+            await message.answer(f"⚠️ Ты уже зарегистрирован в боте как **{already_reg[0]}**!", parse_mode="Markdown")
+            await state.clear()
+            return
+
+        # 3. Ищем точное совпадение введенного ФИО в загруженном ростере группы (регистронезависимо)
+        async with db.execute("SELECT full_name, user_id FROM group_roster WHERE LOWER(full_name) = LOWER(?)", (fio_input,)) as cur:
+            roster_row = await cur.fetchone()
+
+        if not roster_row:
+            await message.answer("❌ **Такого ФИО нет в списке группы!**\nПроверь правильность написания или обратись к старосте/заму.", parse_mode="Markdown")
+            return
+
+        exact_fio = roster_row[0]
+        assigned_user_id = roster_row[1]
+
+        # 4. Проверяем, не привязан ли этот человек из списка УЖЕ к другому Telegram аккаунту
+        if assigned_user_id is not None and assigned_user_id != user_id:
+            await message.answer("⚠️ Этот человек из списка группы **уже зарегистрирован** с другого аккаунта Telegram!", parse_mode="Markdown")
+            return
+
+        # Права админа / зама по ID
+        is_admin = (user_id == ADMIN_ID) or (user_id == ZAM_ID)
+
+        # Сохраняем в таблицу users
         await db.execute("""
             INSERT INTO users (user_id, username, full_name, is_admin, is_blocked, joined_at)
             VALUES (?, ?, ?, ?, 0, ?)
             ON CONFLICT(user_id) DO UPDATE SET full_name = ?, is_admin = ?
-        """, (user_id, username, fio, 1 if is_admin else 0, now_str, fio, 1 if is_admin else 0))
+        """, (user_id, username, exact_fio, 1 if is_admin else 0, now_str, exact_fio, 1 if is_admin else 0))
         
+        # Обновляем ростер группы
         await db.execute("""
-            INSERT INTO group_roster (full_name, is_registered, user_id)
-            VALUES (?, 1, ?)
-            ON CONFLICT(group_roster.full_name) DO UPDATE SET is_registered = 1, user_id = ?
-        """, (fio, user_id, user_id))
+            UPDATE group_roster SET is_registered = 1, user_id = ? WHERE LOWER(full_name) = LOWER(?)
+        """, (user_id, exact_fio))
         
         await db.commit()
 
     await state.clear()
     
     await message.answer(
-        f"✅ Регистрация успешно завершена!\n👤 Студент: **{fio}**",
+        f"✅ Регистрация успешно завершена!\n👤 Студент: **{exact_fio}**",
         reply_markup=main_menu_kb(is_admin),
         parse_mode="Markdown"
     )
@@ -255,7 +277,7 @@ async def process_fio(message: Message, state: FSMContext):
         try:
             await bot.send_message(
                 ADMIN_ID,
-                f"🔔 **Новый студент в системе!**\n👤 ФИО: {fio}\n📱 ТГ: {username}\n🆔 ID: `{user_id}`",
+                f"🔔 **Новый студент в системе!**\n👤 ФИО: {exact_fio}\n📱 ТГ: {username}\n🆔 ID: `{user_id}`",
                 parse_mode="Markdown"
             )
         except Exception:
@@ -342,12 +364,14 @@ async def cb_profile(call: CallbackQuery):
 async def cb_to_main(call: CallbackQuery, state: FSMContext):
     await call.answer()
     await state.clear()
-    is_admin = False
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT is_admin FROM users WHERE user_id = ?", (call.from_user.id,)) as cur:
-            u = await cur.fetchone()
-            if u and (u[0] == 1 or call.from_user.id == ADMIN_ID):
-                is_admin = True
+    user_id = call.from_user.id
+    is_admin = (user_id == ADMIN_ID) or (user_id == ZAM_ID)
+    if not is_admin:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("SELECT is_admin FROM users WHERE user_id = ?", (user_id,)) as cur:
+                u = await cur.fetchone()
+                if u and u[0] == 1:
+                    is_admin = True
 
     await call.message.edit_text("Главное меню:", reply_markup=main_menu_kb(is_admin))
 
@@ -355,12 +379,11 @@ async def cb_to_main(call: CallbackQuery, state: FSMContext):
 # ================= ПАНЕЛЬ УПРАВЛЕНИЯ (АДМИНКА) =================
 @dp.callback_query(F.data == "admin_menu")
 async def cb_admin_menu(call: CallbackQuery):
-    is_admin = False
-    if call.from_user.id == ADMIN_ID:
-        is_admin = True
-    else:
+    user_id = call.from_user.id
+    is_admin = (user_id == ADMIN_ID) or (user_id == ZAM_ID)
+    if not is_admin:
         async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute("SELECT is_admin FROM users WHERE user_id = ?", (call.from_user.id,)) as cur:
+            async with db.execute("SELECT is_admin FROM users WHERE user_id = ?", (user_id,)) as cur:
                 u = await cur.fetchone()
                 if u and u[0] == 1:
                     is_admin = True
@@ -642,7 +665,7 @@ async def process_unban(message: Message, state: FSMContext):
         except Exception:
             pass
     except ValueError:
-        await message.answer("⚠️ ID должен состоять только из цифр!")
+        await message.answer("⚠️ ID должен цифровым!")
     await state.clear()
 
 
@@ -668,7 +691,7 @@ async def process_broadcast(message: Message, state: FSMContext):
             pass
 
     await state.clear()
-    await message.answer("✅ Информация отправлена всей группе!", reply_markup=admin_menu_qx() if 'admin_menu_qx' in globals() else admin_menu_kb())
+    await message.answer("✅ Информация отправлена всей группе!", reply_markup=admin_menu_kb())
 
 
 # ================= ТОЧКА ВХОДА =================
