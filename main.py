@@ -24,11 +24,12 @@ from dotenv import load_dotenv
 # Загружаем переменные окружения
 load_dotenv()
 
-# ================= БЕЗОПАСНАЯ ЗАГРУЗКА ТОКЕНА =================
+# Токен берется из скрытой переменной
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "1154469594"))
-ZAM_ID = int(os.getenv("ZAM_ID", "8977192947"))
 
+# А ваши ID прямо в коде (это абсолютно безопасно для GitHub!)
+ADMIN_ID = 1154469594  # Даня
+ZAM_ID = 8411029132    # Пётр
 DB_PATH = "group_study.db"
 TIMEZONE = "Europe/Moscow"
 
