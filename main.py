@@ -18,38 +18,37 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
-# ================= НАСТРОЙКИ СИСТЕМЫ =================
-BOT_TOKEN = "8602029674:AAGa7OsWmTSXIZjkvG0Uo0FPD2w6Jr1TZ5I"
-ADMIN_ID = 1154469594  # Твой цифровой Telegram ID (Админ: Хамедов Даниил)
-ZAM_ID = 8411029132    # Твой цифровой Telegram ID Зама (Радостнов Пётр)
+import os
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения
+load_dotenv()
+
+# ================= БЕЗОПАСНАЯ ЗАГРУЗКА ТОКЕНА =================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "1154469594"))
+ZAM_ID = int(os.getenv("ZAM_ID", "8977192947"))
+
 DB_PATH = "group_study.db"
 TIMEZONE = "Europe/Moscow"
+
+if not BOT_TOKEN:
+    raise ValueError("❌ ОШИБКА: Не задан BOT_TOKEN в переменных окружения (.env)!")
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Дни недели и месяцы
 RU_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 RU_MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", 
              "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 
-# СПИСОК ПРЕДМЕТОВ С ИКОНКАМИ (1 КУРС СПО 11.02.18)
 SUBJECTS = {
-    "Математика": "📐",
-    "Физика": "⚡",
-    "Информатика": "💻",
-    "Русский язык": "✍️",
-    "Литература": "📚",
-    "Иностранный язык": "🇬🇧",
-    "История": "🏛",
-    "Обществознание": "⚖️",
-    "ОБЗР": "🛡",
-    "Химия": "🧪",
-    "Биология": "🧬",
-    "География": "🌍",
-    "Родной язык": "🗣",
-    "Проектная деятельность": "💡"
+    "Математика": "📐", "Физика": "⚡", "Информатика": "💻",
+    "Русский язык": "✍️", "Литература": "📚", "Иностранный язык": "🇬🇧",
+    "История": "🏛", "Обществознание": "⚖️", "ОБЗР": "🛡",
+    "Химия": "🧪", "Биология": "🧬", "География": "🌍",
+    "Родной язык": "🗣", "Проектная деятельность": "💡"
 }
 
 current_attendance = {}
@@ -101,14 +100,12 @@ class TeacherInfoStates(StatesGroup):
     waiting_for_fio = State()
     waiting_for_avtomat = State()
 
-class AddGradeStates(StatesGroup):
+class PersonalMsgStates(StatesGroup):
     waiting_for_student = State()
-    waiting_for_subject = State()
-    waiting_for_value = State()
+    waiting_for_content = State()
 
 class AdminStates(StatesGroup):
     waiting_for_ban_id = State()
-    waiting_for_unban_id = State()
     waiting_for_broadcast = State()
     waiting_for_roster_input = State()
 
@@ -120,7 +117,7 @@ STUDENTS_LIST = [
 class AddSingleStudentState(StatesGroup):
     waiting_for_name = State()
 
-# ================= ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ =================
+# ================= БАЗА ДАННЫХ =================
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
@@ -146,6 +143,8 @@ async def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 subject TEXT,
                 task TEXT,
+                file_id TEXT,
+                file_type TEXT,
                 deadline TEXT,
                 created_at TEXT
             )
@@ -175,15 +174,6 @@ async def init_db():
                 status TEXT
             )
         """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS grades (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                student_name TEXT,
-                subject TEXT,
-                grade INTEGER,
-                created_at TEXT
-            )
-        """)
 
         for student in STUDENTS_LIST:
             clean_name = " ".join(student.strip().split())
@@ -201,7 +191,7 @@ def main_menu_kb(is_admin: bool = False):
             InlineKeyboardButton(text="👨‍🏫 Преподаватели & Автоматы", callback_data="teachers_view")
         ],
         [
-            InlineKeyboardButton(text="👤 Личный кабинет (Оценки)", callback_data="user_profile"),
+            InlineKeyboardButton(text="👤 Личный кабинет", callback_data="user_profile"),
             InlineKeyboardButton(text="📅 Расписание", url="https://t.me/vvfsched_bot")
         ]
     ]
@@ -216,28 +206,24 @@ def admin_menu_kb():
             InlineKeyboardButton(text="❌ Удалить ДЗ", callback_data="adm_delete_hw_menu")
         ],
         [
-            InlineKeyboardButton(text="⭐ Поставить оценку", callback_data="adm_grade_start"),
-            InlineKeyboardButton(text="🗑 Удалить оценку", callback_data="adm_grade_delete_menu")
+            InlineKeyboardButton(text="✉️ Написать лично", callback_data="adm_personal_msg"),
+            InlineKeyboardButton(text="📝 Перекличка (Журнал)", callback_data="adm_attendance_start")
         ],
         [
-            InlineKeyboardButton(text="📝 Перекличка (Журнал)", callback_data="adm_attendance_start"),
-            InlineKeyboardButton(text="✏️ Инфа по автоматам", callback_data="adm_edit_teacher_start")
+            InlineKeyboardButton(text="✏️ Инфа по автоматам", callback_data="adm_edit_teacher_start"),
+            InlineKeyboardButton(text="➕ Добавить студента", callback_data="adm_add_student_single")
         ],
         [
-            InlineKeyboardButton(text="➕ Добавить студента", callback_data="adm_add_student_single"),
-            InlineKeyboardButton(text="📋 Загрузить списком", callback_data="adm_import_roster")
+            InlineKeyboardButton(text="📋 Загрузить списком", callback_data="adm_import_roster"),
+            InlineKeyboardButton(text="📁 Добавить учебник", callback_data="adm_add_book")
         ],
         [
-            InlineKeyboardButton(text="📁 Добавить учебник", callback_data="adm_add_book"),
-            InlineKeyboardButton(text="👥 Список группы (статус)", callback_data="adm_roster_status")
+            InlineKeyboardButton(text="👥 Список группы", callback_data="adm_roster_status"),
+            InlineKeyboardButton(text="📥 Экспорт (.txt)", callback_data="adm_export_txt")
         ],
         [
-            InlineKeyboardButton(text="📥 Экспорт списка (.txt)", callback_data="adm_export_txt"),
-            InlineKeyboardButton(text="📢 Объявление группе", callback_data="adm_broadcast")
-        ],
-        [
-            InlineKeyboardButton(text="🚫 Блокировка", callback_data="adm_ban"),
-            InlineKeyboardButton(text="✅ Разблокировка", callback_data="adm_unban")
+            InlineKeyboardButton(text="📢 Объявление группе", callback_data="adm_broadcast"),
+            InlineKeyboardButton(text="🚫 Блокировка / Разбан", callback_data="adm_ban")
         ],
         [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="to_main_menu")]
     ]
@@ -264,7 +250,6 @@ def subjects_selection_kb(prefix: str):
 def deadline_selection_kb():
     today = datetime.now()
     kb = []
-    
     d_tomorrow = today + timedelta(days=1)
     d_after_tom = today + timedelta(days=2)
     
@@ -289,6 +274,7 @@ def deadline_selection_kb():
     kb.append([InlineKeyboardButton(text="К следующей паре", callback_data="dl_val:К следующей паре")])
     kb.append([InlineKeyboardButton(text="❌ Отмена", callback_data="to_main_menu")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
+
 # ================= ПЛАНИРОВЩИК ДЗ (19:00) =================
 async def send_daily_hw_reminder():
     async with aiosqlite.connect(DB_PATH) as db:
@@ -403,7 +389,7 @@ async def process_fio(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(f"✅ Регистрация завершена!\n👤 Студент: **{exact_fio}**", reply_markup=main_menu_kb(is_admin), parse_mode="Markdown")
 
-# ================= ЛИЧНЫЙ КАБИНЕТ И ОЦЕНКИ =================
+# ================= ЛИЧНЫЙ КАБИНЕТ =================
 @dp.callback_query(F.data == "user_profile")
 async def cb_profile(call: CallbackQuery):
     await call.answer()
@@ -434,84 +420,84 @@ async def cb_profile(call: CallbackQuery):
         valid_c = att[2] or 0
         absent_c = att[3] or 0
 
-        async with db.execute("SELECT grade FROM grades WHERE student_name = ?", (full_name,)) as cur:
-            grades_rows = await cur.fetchall()
-
-        grades_list = [g[0] for g in grades_rows]
-        count_5 = grades_list.count(5)
-        count_4 = grades_list.count(4)
-        count_3 = grades_list.count(3)
-        count_2 = grades_list.count(2)
-        avg_grade = f"{sum(grades_list)/len(grades_list):.2f}" if grades_list else "—"
-
     text = (
         f"👤 **ЛИЧНЫЙ КАБИНЕТ СТУДЕНТА**\n"
         f"─────────────────────\n"
         f"🎓 **ФИО:** {full_name}\n"
         f"📅 **В системе с:** {u[1]}\n\n"
-        f"📊 **ПОСЕЩАЕМОСТЬ:**\n"
+        f"📊 **ВАША ПОСЕЩАЕМОСТЬ:**\n"
         f"• ✅ Присутствовал: **{present_c}** пар(ы)\n"
         f"• 🤒 По болезни: **{ill_c}**\n"
         f"• 📄 Уважительная: **{valid_c}**\n"
-        f"• ❌ **Прогулов (н/а): {absent_c}**\n\n"
-        f"📈 **СВОДКА ОЦЕНОК:**\n"
-        f"• ⭐ **Средний балл:** `{avg_grade}`\n"
-        f"• 🟢 Пятёрок (5): **{count_5}** | 🔵 Четвёрок (4): **{count_4}**\n"
-        f"• 🟡 Троек (3): **{count_3}** | 🔴 Двоек (2): **{count_2}**\n"
+        f"• ❌ **Прогулов (н/а): {absent_c}**\n"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Мой электронный дневник", callback_data="view_my_grades")],
         [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="to_main_menu")]
     ])
     await call.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
 
-@dp.callback_query(F.data == "view_my_grades")
-async def cb_view_my_grades(call: CallbackQuery):
+# ================= АДМИНКА: ЛИЧНЫЕ СООБЩЕНИЯ СТУДЕНТУ =================
+@dp.callback_query(F.data == "adm_personal_msg")
+async def cb_adm_personal_msg(call: CallbackQuery, state: FSMContext):
     await call.answer()
-    user_id = call.from_user.id
-    
     async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT full_name FROM users WHERE user_id = ?", (user_id,)) as cur:
-            u = await cur.fetchone()
-        
-        full_name = u[0] if u else ""
-        async with db.execute("SELECT subject, grade FROM grades WHERE student_name = ? ORDER BY id ASC", (full_name,)) as cur:
-            rows = await cur.fetchall()
+        async with db.execute("SELECT full_name, user_id FROM users WHERE user_id IS NOT NULL AND is_blocked = 0") as cur:
+            users = await cur.fetchall()
 
-    if not rows:
-        await call.message.edit_text(
-            "📊 **Ваш дневник пуст.**\nОценок пока не выставлено.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ В кабинет", callback_data="user_profile")]]),
-            parse_mode="Markdown"
-        )
+    if not users:
+        await call.message.edit_text("⚠️ В боте еще нет зарегистрированных студентов.", reply_markup=admin_menu_kb())
         return
 
-    by_subj = {}
-    for sub, g in rows:
-        by_subj.setdefault(sub, []).append(g)
+    kb = []
+    for u in users:
+        kb.append([InlineKeyboardButton(text=f"✉️ {u[0]}", callback_data=f"pm_u:{u[1]}")])
+    kb.append([InlineKeyboardButton(text="❌ Отмена", callback_data="admin_menu")])
 
-    total_all_grades = []
-    text = "📊 **ЭЛЕКТРОННЫЙ ДНЕВНИК ПО ПРЕДМЕТАМ:**\n\n"
+    await call.message.edit_text("✉️ **Выберите студента, которому хотите написать лично:**", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="Markdown")
+    await state.set_state(PersonalMsgStates.waiting_for_student)
 
-    for sub, g_list in by_subj.items():
-        icon = SUBJECTS.get(sub, "📖")
-        sub_avg = sum(g_list) / len(g_list)
-        total_all_grades.extend(g_list)
-        predicted = round(sub_avg)
-        g_str = ", ".join(map(str, g_list))
-        
-        text += f"{icon} **{sub}**\n"
-        text += f"• Оценки: `{g_str}`\n"
-        text += f"• Средний: **{sub_avg:.2f}** ➔ Выходит: **{predicted}**\n\n"
+@dp.callback_query(StateFilter(PersonalMsgStates.waiting_for_student), F.data.startswith("pm_u:"))
+async def cb_pm_user_chosen(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    target_id = int(call.data.split(":")[1])
+    
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT full_name FROM users WHERE user_id = ?", (target_id,)) as cur:
+            u = await cur.fetchone()
 
-    overall_avg = sum(total_all_grades) / len(total_all_grades)
-    text += f"─────────────────────\n⭐ **ОБЩИЙ СРЕДНИЙ БАЛЛ:** `{overall_avg:.2f}`"
+    if not u:
+        await call.message.edit_text("Студент не найден.", reply_markup=admin_menu_kb())
+        await state.clear()
+        return
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ Назад в кабинет", callback_data="user_profile")]
-    ])
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    await state.update_data(target_user_id=target_id, target_name=u[0])
+    await call.message.edit_text(f"✉️ Студент: **{u[0]}**\n\n📝 Отправьте сообщение, фото или файл (староста/зам):", reply_markup=back_to_main_kb(), parse_mode="Markdown")
+    await state.set_state(PersonalMsgStates.waiting_for_content)
+
+@dp.message(StateFilter(PersonalMsgStates.waiting_for_content), F.text | F.photo | F.document)
+async def process_personal_msg(message: Message, state: FSMContext):
+    data = await state.get_data()
+    target_id = data["target_user_id"]
+    target_name = data["target_name"]
+
+    caption = message.caption or message.text or ""
+    header = "👑 **Личное сообщение от старости/зама:**\n\n"
+    full_caption = header + caption if caption else header
+
+    try:
+        if message.photo:
+            await bot.send_photo(target_id, photo=message.photo[-1].file_id, caption=full_caption, parse_mode="Markdown")
+        elif message.document:
+            await bot.send_document(target_id, document=message.document.file_id, caption=full_caption, parse_mode="Markdown")
+        else:
+            await bot.send_message(target_id, full_caption, parse_mode="Markdown")
+
+        await message.answer(f"✅ Сообщение успешно отправлено студенту **{target_name}**!", reply_markup=admin_menu_kb(), parse_mode="Markdown")
+    except Exception as e:
+        await message.answer(f"❌ Не удалось отправить сообщение.\nОшибка: {e}", reply_markup=admin_menu_kb())
+
+    await state.clear()
 
 # ================= АДМИНКА: ДОБАВЛЕНИЕ СТУДЕНТОВ =================
 @dp.callback_query(F.data == "adm_add_student_single")
@@ -538,144 +524,30 @@ async def process_single_student_name(message: Message, state: FSMContext):
             await message.answer("⚠️ Такой студент уже есть в списке группы!", reply_markup=admin_menu_kb())
     await state.clear()
 
-# ================= АДМИНКА: ОЦЕНКИ =================
-@dp.callback_query(F.data == "adm_grade_start")
-async def cb_grade_start(call: CallbackQuery, state: FSMContext):
-    await call.answer()
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT id, full_name FROM group_roster ORDER BY full_name") as cur:
-            students = await cur.fetchall()
-
-    if not students:
-        await call.message.edit_text("Список группы пуст.", reply_markup=admin_menu_kb())
-        return
-
-    kb = []
-    for s in students:
-        r_id, fio = s[0], s[1]
-        short_name = " ".join([fio.split()[0], fio.split()[1][0] + "." if len(fio.split()) > 1 else ""])
-        kb.append([InlineKeyboardButton(text=f"👤 {short_name}", callback_data=f"gr_u:{r_id}")])
-    
-    kb.append([InlineKeyboardButton(text="❌ Отмена", callback_data="admin_menu")])
-
-    await call.message.edit_text("⭐ **Выберите студента для оценки:**", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="Markdown")
-    await state.set_state(AddGradeStates.waiting_for_student)
-
-@dp.callback_query(StateFilter(AddGradeStates.waiting_for_student), F.data.startswith("gr_u:"))
-async def cb_grade_user_chosen(call: CallbackQuery, state: FSMContext):
-    await call.answer()
-    r_id = int(call.data.split(":")[1])
-    
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT full_name, user_id FROM group_roster WHERE id = ?", (r_id,)) as cur:
-            student = await cur.fetchone()
-
-    if not student:
-        await call.message.edit_text("Студент не найден.", reply_markup=admin_menu_kb())
-        await state.clear()
-        return
-
-    await state.update_data(student_name=student[0], target_user_id=student[1])
-    await call.message.edit_text(f"👤 Студент: **{student[0]}**\n\n📖 **Выберите предмет:**", reply_markup=subjects_selection_kb("gr_sub"), parse_mode="Markdown")
-    await state.set_state(AddGradeStates.waiting_for_subject)
-
-@dp.callback_query(StateFilter(AddGradeStates.waiting_for_subject), F.data.startswith("gr_sub:"))
-async def cb_grade_subject_chosen(call: CallbackQuery, state: FSMContext):
-    await call.answer()
-    subject = call.data.split(":")[1]
-    await state.update_data(subject=subject)
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="5 🟢", callback_data="set_gr:5"),
-            InlineKeyboardButton(text="4 🔵", callback_data="set_gr:4"),
-        ],
-        [
-            InlineKeyboardButton(text="3 🟡", callback_data="set_gr:3"),
-            InlineKeyboardButton(text="2 🔴", callback_data="set_gr:2")
-        ],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_menu")]
-    ])
-    await call.message.edit_text(f"Выберите оценку по предмету **{subject}**:", reply_markup=kb, parse_mode="Markdown")
-    await state.set_state(AddGradeStates.waiting_for_value)
-
-@dp.callback_query(StateFilter(AddGradeStates.waiting_for_value), F.data.startswith("set_gr:"))
-async def cb_grade_value_chosen(call: CallbackQuery, state: FSMContext):
-    await call.answer()
-    grade = int(call.data.split(":")[1])
-    data = await state.get_data()
-    student_name = data["student_name"]
-    target_user_id = data.get("target_user_id")
-    subject = data["subject"]
-    now_str = datetime.now().strftime("%d.%m.%Y")
-    icon = SUBJECTS.get(subject, "📖")
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO grades (student_name, subject, grade, created_at) VALUES (?, ?, ?, ?)",
-            (student_name, subject, grade, now_str)
-        )
-        await db.commit()
-
-    await state.clear()
-    await call.message.edit_text(f"✅ Оценка **{grade}** для **{student_name}** ({subject}) сохранена!", reply_markup=admin_menu_kb(), parse_mode="Markdown")
-
-    if target_user_id:
-        try:
-            await bot.send_message(
-                target_user_id,
-                f"🔔 **Вам выставлена новая оценка!**\n\n{icon} **Предмет:** {subject}\n⭐ **Оценка:** `{grade}`\n\nДневник доступен в Личном кабинете.",
-                parse_mode="Markdown"
-            )
-        except Exception:
-            pass
-
-@dp.callback_query(F.data == "adm_grade_delete_menu")
-async def cb_adm_grade_delete_menu(call: CallbackQuery):
-    await call.answer()
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT id, student_name, subject, grade FROM grades ORDER BY id DESC LIMIT 8") as cur:
-            recent_grades = await cur.fetchall()
-
-    if not recent_grades:
-        await call.message.edit_text("Оценок в базе нет.", reply_markup=admin_menu_kb())
-        return
-
-    kb = []
-    for g in recent_grades:
-        short_fio = g[1].split()[0]
-        btn_text = f"❌ {short_fio} | {g[2]}: {g[3]}"
-        kb.append([InlineKeyboardButton(text=btn_text, callback_data=f"del_gr:{g[0]}")])
-    kb.append([InlineKeyboardButton(text="⬅️ В админку", callback_data="admin_menu")])
-
-    await call.message.edit_text("🗑 **Выберите оценку для удаления:**", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="Markdown")
-
-@dp.callback_query(F.data.startswith("del_gr:"))
-async def cb_del_grade_confirm(call: CallbackQuery):
-    g_id = int(call.data.split(":")[1])
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM grades WHERE id = ?", (g_id,))
-        await db.commit()
-    await call.answer("✅ Оценка удалена!", show_alert=True)
-    await cb_adm_grade_delete_menu(call)
-
 # ================= РАЗДЕЛ: ДЗ =================
 @dp.callback_query(F.data == "hw_view")
 async def cb_hw_view(call: CallbackQuery):
     await call.answer()
     async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT subject, task, deadline, created_at FROM homework ORDER BY id DESC LIMIT 7") as cur:
+        async with db.execute("SELECT subject, task, file_id, file_type, deadline, created_at FROM homework ORDER BY id DESC LIMIT 5") as cur:
             rows = await cur.fetchall()
 
     if not rows:
         text = "🌴 **На данный момент актуальных заданий нет.** Всё чисто!"
-    else:
-        text = "📚 **АКТУАЛЬНЫЕ ДОМАШНИЕ ЗАДАНИЯ:**\n\n"
-        for r in rows:
-            icon = SUBJECTS.get(r[0], "📖")
-            text += f"{icon} **{r[0]}**\n📝 **Задание:** {r[1]}\n⏳ **Срок сдачи:** `{r[2]}`\n───────────────\n"
+        await call.message.edit_text(text, reply_markup=back_to_main_kb(), parse_mode="Markdown")
+        return
 
-    await call.message.edit_text(text, reply_markup=back_to_main_kb(), parse_mode="Markdown")
+    await call.message.edit_text("📚 **АКТУАЛЬНЫЕ ДОМАШНИЕ ЗАДАНИЯ:**", reply_markup=back_to_main_kb(), parse_mode="Markdown")
+    for r in rows:
+        icon = SUBJECTS.get(r[0], "📖")
+        task_text = f"{icon} **{r[0]}**\n📝 **Задание:** {r[1]}\n⏳ **Срок сдачи:** `{r[4]}`\n───────────────"
+        if r[2]:
+            if r[3] == "photo":
+                await call.message.answer_photo(photo=r[2], caption=task_text, parse_mode="Markdown")
+            elif r[3] == "document":
+                await call.message.answer_document(document=r[2], caption=task_text, parse_mode="Markdown")
+        else:
+            await call.message.answer(task_text, parse_mode="Markdown")
 
 @dp.callback_query(F.data == "adm_delete_hw_menu")
 async def cb_adm_delete_hw_menu(call: CallbackQuery):
@@ -940,12 +812,23 @@ async def cb_hw_subject_selected(call: CallbackQuery, state: FSMContext):
     subject_name = call.data.split(":")[1]
     await state.update_data(subject=subject_name)
     icon = SUBJECTS.get(subject_name, "📖")
-    await call.message.edit_text(f"{icon} Предмет: **{subject_name}**\n\n📝 Напишите **текст задания**:", parse_mode="Markdown")
+    await call.message.edit_text(f"{icon} Предмет: **{subject_name}**\n\n📝 Отправьте **текст задания, фотографию или документ (файл)**:", parse_mode="Markdown")
     await state.set_state(AddHwStates.waiting_for_task)
 
-@dp.message(StateFilter(AddHwStates.waiting_for_task))
+@dp.message(StateFilter(AddHwStates.waiting_for_task), F.text | F.photo | F.document)
 async def hw_task_input(message: Message, state: FSMContext):
-    await state.update_data(task=message.text.strip())
+    task_text = message.caption or message.text or "Домашнее задание (без текста)"
+    file_id = None
+    file_type = None
+
+    if message.photo:
+        file_id = message.photo[-1].file_id
+        file_type = "photo"
+    elif message.document:
+        file_id = message.document.file_id
+        file_type = "document"
+
+    await state.update_data(task=task_text, file_id=file_id, file_type=file_type)
     await message.answer("⏳ **Выберите срок сдачи:**", reply_markup=deadline_selection_kb())
     await state.set_state(AddHwStates.waiting_for_deadline_choice)
 
@@ -956,11 +839,16 @@ async def hw_deadline_chosen(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     subject = data["subject"]
     task = data["task"]
+    file_id = data.get("file_id")
+    file_type = data.get("file_type")
     created = datetime.now().strftime("%d.%m.%Y")
     icon = SUBJECTS.get(subject, "📖")
 
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("INSERT INTO homework (subject, task, deadline, created_at) VALUES (?, ?, ?, ?)", (subject, task, deadline, created))
+        await db.execute(
+            "INSERT INTO homework (subject, task, file_id, file_type, deadline, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (subject, task, file_id, file_type, deadline, created)
+        )
         await db.commit()
         async with db.execute("SELECT user_id FROM users WHERE is_blocked = 0") as cur:
             students = await cur.fetchall()
@@ -971,7 +859,13 @@ async def hw_deadline_chosen(call: CallbackQuery, state: FSMContext):
     alert_msg = f"🚨 **НОВОЕ ДОМАШНЕЕ ЗАДАНИЕ!**\n\n{icon} **Предмет:** {subject}\n📝 **Задание:** {task}\n⏳ **Сдать до:** `{deadline}`\n"
     for s in students:
         try:
-            await bot.send_message(s[0], alert_msg, parse_mode="Markdown")
+            if file_id:
+                if file_type == "photo":
+                    await bot.send_photo(s[0], photo=file_id, caption=alert_msg, parse_mode="Markdown")
+                elif file_type == "document":
+                    await bot.send_document(s[0], document=file_id, caption=alert_msg, parse_mode="Markdown")
+            else:
+                await bot.send_message(s[0], alert_msg, parse_mode="Markdown")
             await asyncio.sleep(0.05)
         except Exception:
             pass
@@ -1097,7 +991,7 @@ async def cb_export_txt(call: CallbackQuery):
 @dp.callback_query(F.data == "adm_ban")
 async def cb_ban_start(call: CallbackQuery, state: FSMContext):
     await call.answer()
-    await call.message.answer("Введите **Telegram ID** для бана:")
+    await call.message.answer("Введите **Telegram ID** для бана или разбана:")
     await state.set_state(AdminStates.waiting_for_ban_id)
 
 @dp.message(StateFilter(AdminStates.waiting_for_ban_id))
@@ -1105,29 +999,22 @@ async def process_ban(message: Message, state: FSMContext):
     try:
         t_id = int(message.text.strip())
         async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("UPDATE users SET is_blocked = 1 WHERE user_id = ?", (t_id,))
-            await db.commit()
-        await message.answer(f"⛔ ID `{t_id}` заблокирован!", reply_markup=admin_menu_kb())
+            async with db.execute("SELECT is_blocked FROM users WHERE user_id = ?", (t_id,)) as cur:
+                user = await cur.fetchone()
+            
+            if not user:
+                await message.answer(f"⚠️ Пользователь с ID `{t_id}` не найден.", reply_markup=admin_menu_kb())
+            else:
+                new_status = 0 if user[0] == 1 else 1
+                await db.execute("UPDATE users SET is_blocked = ? WHERE user_id = ?", (new_status, t_id))
+                await db.commit()
+                
+                if new_status == 1:
+                    await message.answer(f"⛔ Пользователь с ID `{t_id}` заблокирован!", reply_markup=admin_menu_kb())
+                else:
+                    await message.answer(f"✅ Пользователь с ID `{t_id}` разблокирован!", reply_markup=admin_menu_kb())
     except ValueError:
-        await message.answer("⚠️ Введите числовой ID.")
-    await state.clear()
-
-@dp.callback_query(F.data == "adm_unban")
-async def cb_unban_start(call: CallbackQuery, state: FSMContext):
-    await call.answer()
-    await call.message.answer("Введите **Telegram ID** для разблокировки:")
-    await state.set_state(AdminStates.waiting_for_unban_id)
-
-@dp.message(StateFilter(AdminStates.waiting_for_unban_id))
-async def process_unban(message: Message, state: FSMContext):
-    try:
-        t_id = int(message.text.strip())
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("UPDATE users SET is_blocked = 0 WHERE user_id = ?", (t_id,))
-            await db.commit()
-        await message.answer(f"✅ ID `{t_id}` разблокирован!", reply_markup=admin_menu_kb())
-    except ValueError:
-        await message.answer("⚠️ Введите числовой ID.")
+        await message.answer("⚠️ Введите корректный числовой Telegram ID.")
     await state.clear()
 
 # Рассылка
